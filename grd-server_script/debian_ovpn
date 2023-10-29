@@ -1,9 +1,9 @@
 #!/bin/bash
 #Script Variables
 HOST='206.72.198.91'
-USER='ymodscf_hilvpn'
-PASS='ymodscf_hilvpn'
-DBNAME='ymodscf_hilvpn'
+USER='ymodscf_grds2023'
+PASS='ymodscf_grds2023'
+DBNAME='ymodscf_grds2023'
 
 #PORT OPENVPN
 PORT_TCP='1194';
