@@ -1,0 +1,28 @@
+#!/bin/bash
+
+echo -e "\033[1;31m═══════════════════════════════════════════════════\033[0m"
+echo '                                                              
+   ██╗   ██╗███╗   ███╗ ██████╗ ██████╗ ██╗███████╗██╗███████╗██████╗ 
+   ╚██╗ ██╔╝████╗ ████║██╔═══██╗██╔══██╗██║██╔════╝██║██╔════╝██╔══██╗
+    ╚████╔╝ ██╔████╔██║██║   ██║██║  ██║██║█████╗  ██║█████╗  ██║  ██║
+     ╚██╔╝  ██║╚██╔╝██║██║   ██║██║  ██║██║██╔══╝  ██║██╔══╝  ██║  ██║
+      ██║   ██║ ╚═╝ ██║╚██████╔╝██████╔╝██║██║     ██║███████╗██████╔╝
+      ╚═╝   ╚═╝     ╚═╝ ╚═════╝ ╚═════╝ ╚═╝╚═╝     ╚═╝╚══════╝╚═════╝ 
+ '
+echo -e "\033[1;31m═══════════════════════════════════════════════════\033[0m"
+
+echo -e "Take time while installing YModified Encryption file"
+sleep 10
+yum update -y
+yum install make
+yum install wget
+yum install curl
+yum install curl make gcc
+cd /tmp/
+wget https://raw.githubusercontent.com/kupals/kupalhil/main/shc-3.8.7.tgz
+tar xvfz shc-3.8.7.tgz
+mkdir /opt/shc
+mv shc-3.8.7 /opt/shc/
+cd /opt/shc/shc-3.8.7
+make
+ln -s /opt/shc/shc-3.8.7/shc /usr/local/bin
